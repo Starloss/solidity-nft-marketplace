@@ -66,6 +66,34 @@ contract NFTsMarketplace is AccessControlUpgradeable {
 
     /// MODIFIERS
 
+    modifier orderIsAvailable(uint _orderID) {
+        require(
+            ordersByID[_orderID].state == OrderState.OPEN,
+            "The order is not available"
+        );
+        _;
+    }
+
+    modifier canCreateOrder(ERC1155 token, uint _tokenID, uint _tokenAmount) {
+        require(
+            token.isApprovedForAll(msg.sender, address(this)),
+            "This contract is not allowed to transfer sender's tokens"
+        );
+        require(
+            token.balanceOf(msg.sender, _tokenID) >= _tokenAmount,
+            "The user has not enough tokens"
+        );
+        _;
+    }
+
+    modifier ownerOfOrder(uint _orderID) {
+        require(
+            msg.sender == ordersByID[_orderID].seller,
+            "You are not the owner of this order"
+        );
+        _;
+    }
+
     /// FUNCTIONS
     /**
      *  @notice Constructor function that initialice the contract
@@ -89,33 +117,48 @@ contract NFTsMarketplace is AccessControlUpgradeable {
         uint _tokenAmount,
         uint _deadline,
         uint _price
-    ) public {
-        ERC1155 token = ERC1155(_tokenAddress);
-
-        require(token.isApprovedForAll(msg.sender, address(this)), "This contract is not allowed to transfer sender's tokens");
-        require(token.balanceOf(msg.sender, _tokenID) >= _tokenAmount, "The user has not enough tokens");
-
+    )
+        public
+        canCreateOrder(ERC1155(_tokenAddress), _tokenID, _tokenAmount)
+    {
         orderCount++;
 
-        Order memory newOrder = Order(_tokenAddress, payable(msg.sender), _tokenID, _tokenAmount, _deadline, _price, orderCount, OrderState.OPEN);
+        Order memory newOrder = Order(
+            _tokenAddress,
+            payable(msg.sender),
+            _tokenID,
+            _tokenAmount,
+            _deadline,
+            _price,
+            orderCount,
+            OrderState.OPEN
+        );
         ordersByID[orderCount] = newOrder;
 
-        emit SellOrderCreated(orderCount, msg.sender, _tokenAddress, _tokenID, _tokenAmount, _deadline, _price);
+        emit SellOrderCreated(
+            orderCount,
+            msg.sender,
+            _tokenAddress,
+            _tokenID,
+            _tokenAmount,
+            _deadline,
+            _price
+        );
     }
 
-    function cancelOrder(uint _orderID) public {
-        require(msg.sender == ordersByID[_orderID].seller, "You are not the owner of this order");
-        require(ordersByID[_orderID].state == OrderState.OPEN, "The order is not available");
-
+    function cancelOrder(uint _orderID)
+        public
+        orderIsAvailable(_orderID)
+        ownerOfOrder(_orderID)
+    {
         ordersByID[_orderID].state = OrderState.CANCELED;
 
         emit SellOrderCanceled(_orderID);
     }
 
-    function buyWithETH(uint _orderID) payable public {
+    function buyWithETH(uint _orderID) payable public orderIsAvailable(_orderID) {
         uint weiCost = (ordersByID[_orderID].price * 10 ** 36) / uint(getETHPrice() * 10 ** 10);
 
-        require(ordersByID[_orderID].state == OrderState.OPEN, "The order is not available");
         require(msg.value >= weiCost, "Not enough ETH sended for this transaction");
 
         if (ordersByID[_orderID].deadline <= block.timestamp) {
@@ -136,7 +179,12 @@ contract NFTsMarketplace is AccessControlUpgradeable {
             revert("The seller has revoked access to their tokens to this contract");
         }
 
-        if (token.balanceOf(ordersByID[_orderID].seller, ordersByID[_orderID].tokenID) >= ordersByID[_orderID].tokenAmount) {
+        if (
+            token.balanceOf(
+                ordersByID[_orderID].seller,
+                ordersByID[_orderID].tokenID
+            ) >= ordersByID[_orderID].tokenAmount
+        ) {
             ordersByID[_orderID].state = OrderState.ERROR_AMOUNT;
 
             emit SellOrderCanceled(_orderID);
@@ -152,15 +200,19 @@ contract NFTsMarketplace is AccessControlUpgradeable {
         (success, ) = ordersByID[_orderID].seller.call{value: (weiCost * (100 - adminFee)) / 100}("");
         require(success);
 
-        token.safeTransferFrom(ordersByID[_orderID].seller, msg.sender, ordersByID[_orderID].tokenID, ordersByID[_orderID].tokenAmount, "");
+        token.safeTransferFrom(
+            ordersByID[_orderID].seller,
+            msg.sender,
+            ordersByID[_orderID].tokenID,
+            ordersByID[_orderID].tokenAmount,
+            ""
+        );
 
         emit SellOrderCompleted(_orderID, msg.sender);
     }
 
-    function buyWithDAI(uint _orderID) public {
+    function buyWithDAI(uint _orderID) public orderIsAvailable(_orderID) {
         uint DAICost = (ordersByID[_orderID].price * 10 ** 36) / uint(getDAIPrice() * 10 ** 10);
-
-        require(ordersByID[_orderID].state == OrderState.OPEN, "The order is not available");
 
         if (ordersByID[_orderID].deadline <= block.timestamp) {
             ordersByID[_orderID].state = OrderState.TIME_ENDED;
@@ -180,7 +232,12 @@ contract NFTsMarketplace is AccessControlUpgradeable {
             revert("The seller has revoked access to their tokens to this contract");
         }
 
-        if (token.balanceOf(ordersByID[_orderID].seller, ordersByID[_orderID].tokenID) >= ordersByID[_orderID].tokenAmount) {
+        if (
+            token.balanceOf(
+                ordersByID[_orderID].seller,
+                ordersByID[_orderID].tokenID
+            ) >= ordersByID[_orderID].tokenAmount
+        ) {
             ordersByID[_orderID].state = OrderState.ERROR_AMOUNT;
 
             emit SellOrderCanceled(_orderID);
@@ -190,22 +247,40 @@ contract NFTsMarketplace is AccessControlUpgradeable {
 
         ERC20 coin = ERC20(DAIAddress);
 
-        require(coin.allowance(msg.sender, address(this)) >= DAICost, "This contract is not allowed to transfer buyer's tokens");
+        require(
+            coin.allowance(msg.sender, address(this)) >= DAICost,
+            "This contract is not allowed to transfer buyer's tokens"
+        );
 
         ordersByID[_orderID].state = OrderState.DONE;
 
-        require(coin.transferFrom(msg.sender, address(this), (DAICost * adminFee) / 100));
-        require(coin.transferFrom(msg.sender, ordersByID[_orderID].seller, (DAICost * (100 - adminFee)) / 100));
+        require(
+            coin.transferFrom(
+                msg.sender, address(this),
+                (DAICost * adminFee) / 100
+            )
+        );
+        require(
+            coin.transferFrom(
+                msg.sender,
+                ordersByID[_orderID].seller,
+                (DAICost * (100 - adminFee)) / 100
+            )
+        );
 
-        token.safeTransferFrom(ordersByID[_orderID].seller, msg.sender, ordersByID[_orderID].tokenID, ordersByID[_orderID].tokenAmount, "");
+        token.safeTransferFrom(
+            ordersByID[_orderID].seller,
+            msg.sender,
+            ordersByID[_orderID].tokenID,
+            ordersByID[_orderID].tokenAmount,
+            ""
+        );
 
         emit SellOrderCompleted(_orderID, msg.sender);
     }
     
-    function buyWithLINK(uint _orderID) public {
+    function buyWithLINK(uint _orderID) public orderIsAvailable(_orderID) {
         uint LINKCost = (ordersByID[_orderID].price * 10 ** 36) / uint(getLINKPrice() * 10 ** 10);
-
-        require(ordersByID[_orderID].state == OrderState.OPEN, "The order is not available");
 
         if (ordersByID[_orderID].deadline <= block.timestamp) {
             ordersByID[_orderID].state = OrderState.TIME_ENDED;
@@ -225,7 +300,12 @@ contract NFTsMarketplace is AccessControlUpgradeable {
             revert("The seller has revoked access to their tokens to this contract");
         }
 
-        if (token.balanceOf(ordersByID[_orderID].seller, ordersByID[_orderID].tokenID) >= ordersByID[_orderID].tokenAmount) {
+        if (
+            token.balanceOf(
+                ordersByID[_orderID].seller,
+                ordersByID[_orderID].tokenID
+            ) >= ordersByID[_orderID].tokenAmount
+        ) {
             ordersByID[_orderID].state = OrderState.ERROR_AMOUNT;
 
             emit SellOrderCanceled(_orderID);
@@ -235,14 +315,35 @@ contract NFTsMarketplace is AccessControlUpgradeable {
 
         ERC20 coin = ERC20(LINKAddress);
 
-        require(coin.allowance(msg.sender, address(this)) >= LINKCost, "This contract is not allowed to transfer buyer's tokens");
+        require(
+            coin.allowance(msg.sender, address(this)) >= LINKCost,
+            "This contract is not allowed to transfer buyer's tokens"
+        );
 
         ordersByID[_orderID].state = OrderState.DONE;
 
-        require(coin.transferFrom(msg.sender, address(this), (LINKCost * adminFee) / 100));
-        require(coin.transferFrom(msg.sender, ordersByID[_orderID].seller, (LINKCost * (100 - adminFee)) / 100));
+        require(
+            coin.transferFrom(
+                msg.sender,
+                address(this),
+                (LINKCost * adminFee) / 100
+            )
+        );
+        require(
+            coin.transferFrom(
+                msg.sender,
+                ordersByID[_orderID].seller,
+                (LINKCost * (100 - adminFee)) / 100
+            )
+        );
 
-        token.safeTransferFrom(ordersByID[_orderID].seller, msg.sender, ordersByID[_orderID].tokenID, ordersByID[_orderID].tokenAmount, "");
+        token.safeTransferFrom(
+            ordersByID[_orderID].seller,
+            msg.sender,
+            ordersByID[_orderID].tokenID,
+            ordersByID[_orderID].tokenAmount,
+            ""
+        );
 
         emit SellOrderCompleted(_orderID, msg.sender);
     }
