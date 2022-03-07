@@ -52,6 +52,15 @@ contract NFTsMarketplace is AccessControlUpgradeable, ReentrancyGuardUpgradeable
         uint _price
     );
 
+    event SellOrderCanceled(
+        uint _orderID
+    );
+
+    event SellOrderCompleted(
+        uint _orderID,
+        address _buyer
+    );
+
     /// MODIFIERS
 
     /// FUNCTIONS
@@ -94,6 +103,8 @@ contract NFTsMarketplace is AccessControlUpgradeable, ReentrancyGuardUpgradeable
         require(ordersByID[_orderID].state == OrderState.OPEN, "The order is not active");
 
         ordersByID[_orderID].state = OrderState.CANCELED;
+
+        emit SellOrderCanceled(_orderID);
     }
 
     function buyWithETH(uint _orderID) payable public {
@@ -104,6 +115,9 @@ contract NFTsMarketplace is AccessControlUpgradeable, ReentrancyGuardUpgradeable
 
         if (ordersByID[_orderID].deadline <= block.timestamp) {
             ordersByID[_orderID].state = OrderState.TIME_ENDED;
+            
+            emit SellOrderCanceled(_orderID);
+            
             revert("The order has reached his deadline");
         }
 
@@ -111,11 +125,17 @@ contract NFTsMarketplace is AccessControlUpgradeable, ReentrancyGuardUpgradeable
 
         if (token.isApprovedForAll(ordersByID[_orderID].seller, address(this))) {
             ordersByID[_orderID].state = OrderState.ERROR_APPROVED;
+
+            emit SellOrderCanceled(_orderID);
+
             revert("The seller has revoked access to their tokens to this contract");
         }
 
         if (token.balanceOf(ordersByID[_orderID].seller, ordersByID[_orderID].tokenID) >= ordersByID[_orderID].tokenAmount) {
             ordersByID[_orderID].state = OrderState.ERROR_AMOUNT;
+
+            emit SellOrderCanceled(_orderID);
+            
             revert("The seller doesn't have enough tokens");
         }
 
@@ -128,6 +148,8 @@ contract NFTsMarketplace is AccessControlUpgradeable, ReentrancyGuardUpgradeable
         require(success);
 
         token.safeTransferFrom(ordersByID[_orderID].seller, msg.sender, ordersByID[_orderID].tokenID, ordersByID[_orderID].tokenAmount, "");
+
+        emit SellOrderCompleted(_orderID, msg.sender);
     }
 
     function buyWithDai() public {
