@@ -80,6 +80,9 @@ contract NFTsMarketplace is AccessControlUpgradeable, ReentrancyGuardUpgradeable
         ETHFeed = AggregatorV3Interface(0x8A753747A1Fa494EC906cE90E9f37563A8AF630e);
         DAIFeed = AggregatorV3Interface(0x2bA49Aaa16E6afD2a993473cfB70Fa8559B523cF);
         LINKFeed = AggregatorV3Interface(0xd8bD0a1cB028a31AA859A21A3758685a95dE4623);
+
+        DAIAddress = 0x95b58a6Bff3D14B7DB2f5cb5F0Ad413DC2940658;
+        LINKAddress = 0x01BE23585060835E02B77ef475b0Cc51aA1e0709;
     }
 
     function createNewOrder(
@@ -104,7 +107,7 @@ contract NFTsMarketplace is AccessControlUpgradeable, ReentrancyGuardUpgradeable
 
     function cancelOrder(uint _orderID) public {
         require(msg.sender == ordersByID[_orderID].seller, "You are not the owner of this order");
-        require(ordersByID[_orderID].state == OrderState.OPEN, "The order is not active");
+        require(ordersByID[_orderID].state == OrderState.OPEN, "The order is not available");
 
         ordersByID[_orderID].state = OrderState.CANCELED;
 
@@ -148,7 +151,7 @@ contract NFTsMarketplace is AccessControlUpgradeable, ReentrancyGuardUpgradeable
 
         ordersByID[_orderID].state = OrderState.DONE;
 
-        (success, ) = ordersByID[_orderID].seller.call{value: (weiCost * 99) / 100}("");
+        (success, ) = ordersByID[_orderID].seller.call{value: (weiCost * (100 - adminFee)) / 100}("");
         require(success);
 
         token.safeTransferFrom(ordersByID[_orderID].seller, msg.sender, ordersByID[_orderID].tokenID, ordersByID[_orderID].tokenAmount, "");
@@ -193,8 +196,8 @@ contract NFTsMarketplace is AccessControlUpgradeable, ReentrancyGuardUpgradeable
 
         ordersByID[_orderID].state = OrderState.DONE;
 
-        require(coin.transferFrom(msg.sender, address(this), (DAICost) / 100));
-        require(coin.transferFrom(msg.sender, ordersByID[_orderID].seller, (DAICost * 99) / 100));
+        require(coin.transferFrom(msg.sender, address(this), (DAICost * adminFee) / 100));
+        require(coin.transferFrom(msg.sender, ordersByID[_orderID].seller, (DAICost * (100 - adminFee)) / 100));
 
         token.safeTransferFrom(ordersByID[_orderID].seller, msg.sender, ordersByID[_orderID].tokenID, ordersByID[_orderID].tokenAmount, "");
 
@@ -238,51 +241,51 @@ contract NFTsMarketplace is AccessControlUpgradeable, ReentrancyGuardUpgradeable
 
         ordersByID[_orderID].state = OrderState.DONE;
 
-        require(coin.transferFrom(msg.sender, address(this), (LINKCost) / 100));
-        require(coin.transferFrom(msg.sender, ordersByID[_orderID].seller, (LINKCost * 99) / 100));
+        require(coin.transferFrom(msg.sender, address(this), (LINKCost * adminFee) / 100));
+        require(coin.transferFrom(msg.sender, ordersByID[_orderID].seller, (LINKCost * (100 - adminFee)) / 100));
 
         token.safeTransferFrom(ordersByID[_orderID].seller, msg.sender, ordersByID[_orderID].tokenID, ordersByID[_orderID].tokenAmount, "");
 
         emit SellOrderCompleted(_orderID, msg.sender);
     }
 
-    function setAdminFee(uint _adminFee) public onlyRole(ADMIN_ROLE) {
-        require(_adminFee >= 0 && _adminFee <= 100, "Wrong fee!");
+    function setAdminFee(uint _adminFee) external onlyRole(ADMIN_ROLE) {
+        require(_adminFee >= 0 && _adminFee <= 10, "Wrong fee!");
 
         adminFee = _adminFee;
     }
 
-    function setETHFedd(address _address) public onlyRole(ADMIN_ROLE) {
+    function setETHFedd(address _address) external onlyRole(ADMIN_ROLE) {
         ETHFeed = AggregatorV3Interface(_address);
     }
 
-    function setDAIFedd(address _address) public onlyRole(ADMIN_ROLE) {
+    function setDAIFedd(address _address) external onlyRole(ADMIN_ROLE) {
         DAIFeed = AggregatorV3Interface(_address);
     }
 
-    function setLINKFedd(address _address) public onlyRole(ADMIN_ROLE) {
+    function setLINKFedd(address _address) external onlyRole(ADMIN_ROLE) {
         LINKFeed = AggregatorV3Interface(_address);
     }
 
-    function setDAIAddress(address _address) public onlyRole(ADMIN_ROLE) {
+    function setDAIAddress(address _address) external onlyRole(ADMIN_ROLE) {
         DAIAddress = _address;
     }
 
-    function setLINKAddress(address _address) public onlyRole(ADMIN_ROLE) {
+    function setLINKAddress(address _address) external onlyRole(ADMIN_ROLE) {
         LINKAddress = _address;
     }
 
-    function getETHPrice() private view returns (int) {
+    function getETHPrice() internal view returns (int) {
         ( , int price, , , ) = ETHFeed.latestRoundData();
         return price;
     }
 
-    function getDAIPrice() private view returns (int) {
+    function getDAIPrice() internal view returns (int) {
         ( , int price, , , ) = DAIFeed.latestRoundData();
         return price;
     }
 
-    function getLINKPrice() private view returns (int) {
+    function getLINKPrice() internal view returns (int) {
         ( , int price, , , ) = LINKFeed.latestRoundData();
         return price;
     }
