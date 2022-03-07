@@ -9,15 +9,15 @@ import "@chainlink/contracts/src/v0.8/interfaces/AggregatorV3Interface.sol";
 contract NFTsMarketplace is AccessControlUpgradeable {
 
     /// VARIABLES
-    uint adminFee = 1;
-    uint orderCount = 0;
+    uint public adminFee;
+    uint public orderCount;
 
     AggregatorV3Interface internal ETHFeed;
     AggregatorV3Interface internal DAIFeed;
     AggregatorV3Interface internal LINKFeed;
 
-    address DAIAddress;
-    address LINKAddress;
+    address public DAIAddress;
+    address public LINKAddress;
 
     /**
      *  @notice Bytes32 used for roles in the Dapp
@@ -102,6 +102,9 @@ contract NFTsMarketplace is AccessControlUpgradeable {
         __AccessControl_init();
 
         _grantRole(ADMIN_ROLE, msg.sender);
+
+        adminFee = 1;
+        orderCount = 0;
 
         ETHFeed = AggregatorV3Interface(0x8A753747A1Fa494EC906cE90E9f37563A8AF630e);
         DAIFeed = AggregatorV3Interface(0x2bA49Aaa16E6afD2a993473cfB70Fa8559B523cF);
@@ -372,6 +375,10 @@ contract NFTsMarketplace is AccessControlUpgradeable {
 
     function setLINKAddress(address _address) external onlyRole(ADMIN_ROLE) {
         LINKAddress = _address;
+    }
+
+    function isAdmin(address _address) external view returns (bool) {
+        return(hasRole(ADMIN_ROLE, _address));
     }
 
     function getETHPrice() internal view returns (int) {
