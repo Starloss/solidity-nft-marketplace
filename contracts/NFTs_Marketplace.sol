@@ -2,12 +2,11 @@
 pragma solidity >=0.8.0 <0.9.0;
 
 import "@openzeppelin/contracts-upgradeable/access/AccessControlUpgradeable.sol";
-import '@openzeppelin/contracts-upgradeable/security/ReentrancyGuardUpgradeable.sol';
 import "@openzeppelin/contracts/token/ERC1155/ERC1155.sol";
 import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import "@chainlink/contracts/src/v0.8/interfaces/AggregatorV3Interface.sol";
 
-contract NFTsMarketplace is AccessControlUpgradeable, ReentrancyGuardUpgradeable {
+contract NFTsMarketplace is AccessControlUpgradeable {
 
     /// VARIABLES
     uint adminFee = 1;
@@ -73,7 +72,6 @@ contract NFTsMarketplace is AccessControlUpgradeable, ReentrancyGuardUpgradeable
      */
     function initialize() public initializer {
         __AccessControl_init();
-        __ReentrancyGuard_init();
 
         _grantRole(ADMIN_ROLE, msg.sender);
 
