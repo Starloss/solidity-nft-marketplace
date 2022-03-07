@@ -202,7 +202,48 @@ contract NFTsMarketplace is AccessControlUpgradeable, ReentrancyGuardUpgradeable
     }
     
     function buyWithLINK(uint _orderID) public {
-        
+        uint LINKCost = (ordersByID[_orderID].price * 10 ** 36) / uint(getLINKPrice() * 10 ** 10);
+
+        require(ordersByID[_orderID].state == OrderState.OPEN, "The order is not available");
+
+        if (ordersByID[_orderID].deadline <= block.timestamp) {
+            ordersByID[_orderID].state = OrderState.TIME_ENDED;
+            
+            emit SellOrderCanceled(_orderID);
+            
+            revert("The order has reached his deadline");
+        }
+
+        ERC1155 token = ERC1155(ordersByID[_orderID].tokenAddress);
+
+        if (token.isApprovedForAll(ordersByID[_orderID].seller, address(this))) {
+            ordersByID[_orderID].state = OrderState.ERROR_APPROVED;
+
+            emit SellOrderCanceled(_orderID);
+
+            revert("The seller has revoked access to their tokens to this contract");
+        }
+
+        if (token.balanceOf(ordersByID[_orderID].seller, ordersByID[_orderID].tokenID) >= ordersByID[_orderID].tokenAmount) {
+            ordersByID[_orderID].state = OrderState.ERROR_AMOUNT;
+
+            emit SellOrderCanceled(_orderID);
+            
+            revert("The seller doesn't have enough tokens");
+        }
+
+        ERC20 coin = ERC20(LINKAddress);
+
+        require(coin.allowance(msg.sender, address(this)) >= LINKCost, "This contract is not allowed to transfer buyer's tokens");
+
+        ordersByID[_orderID].state = OrderState.DONE;
+
+        require(coin.transferFrom(msg.sender, address(this), (LINKCost) / 100));
+        require(coin.transferFrom(msg.sender, ordersByID[_orderID].seller, (LINKCost * 99) / 100));
+
+        token.safeTransferFrom(ordersByID[_orderID].seller, msg.sender, ordersByID[_orderID].tokenID, ordersByID[_orderID].tokenAmount, "");
+
+        emit SellOrderCompleted(_orderID, msg.sender);
     }
 
     function setAdminFee(uint _adminFee) public onlyRole(ADMIN_ROLE) {
