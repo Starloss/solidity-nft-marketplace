@@ -89,6 +89,13 @@ contract NFTsMarketplace is AccessControlUpgradeable, ReentrancyGuardUpgradeable
         emit SellOrderCreated(orderCount, msg.sender, _tokenAddress, _tokenID, _tokenAmount, _deadline, _price);
     }
 
+    function cancelOrder(uint _orderID) public {
+        require(msg.sender == ordersByID[_orderID].seller, "You are not the owner of this order");
+        require(ordersByID[_orderID].state == OrderState.OPEN, "The order is not active");
+
+        ordersByID[_orderID].state = OrderState.CANCELED;
+    }
+
     function buyWithETH(uint _orderID) payable public {
         uint weiCost = (ordersByID[_orderID].price * 10 ** 36) / uint(getETHPrice() * 10 ** 10);
 
