@@ -4,6 +4,7 @@ pragma solidity >=0.8.0 <0.9.0;
 import "@openzeppelin/contracts-upgradeable/access/AccessControlUpgradeable.sol";
 import '@openzeppelin/contracts-upgradeable/security/ReentrancyGuardUpgradeable.sol';
 import "@openzeppelin/contracts/token/ERC1155/ERC1155.sol";
+import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import "@chainlink/contracts/src/v0.8/interfaces/AggregatorV3Interface.sol";
 
 contract NFTsMarketplace is AccessControlUpgradeable, ReentrancyGuardUpgradeable {
@@ -15,6 +16,9 @@ contract NFTsMarketplace is AccessControlUpgradeable, ReentrancyGuardUpgradeable
     AggregatorV3Interface internal ETHFeed;
     AggregatorV3Interface internal DAIFeed;
     AggregatorV3Interface internal LINKFeed;
+
+    address DAIAddress;
+    address LINKAddress;
 
     /**
      *  @notice Bytes32 used for roles in the Dapp
@@ -111,7 +115,51 @@ contract NFTsMarketplace is AccessControlUpgradeable, ReentrancyGuardUpgradeable
         uint weiCost = (ordersByID[_orderID].price * 10 ** 36) / uint(getETHPrice() * 10 ** 10);
 
         require(ordersByID[_orderID].state == OrderState.OPEN, "The order is not available");
-        require(msg.value >= weiCost, "Not enough ");
+        require(msg.value >= weiCost, "Not enough ETH sended for this transaction");
+
+        if (ordersByID[_orderID].deadline <= block.timestamp) {
+            ordersByID[_orderID].state = OrderState.TIME_ENDED;
+            
+            emit SellOrderCanceled(_orderID);
+            
+            revert("The order has reached his deadline");
+        }
+
+        ERC1155 token = ERC1155(ordersByID[_orderID].tokenAddress);
+
+        if (token.isApprovedForAll(ordersByID[_orderID].seller, address(this))) {
+            ordersByID[_orderID].state = OrderState.ERROR_APPROVED;
+
+            emit SellOrderCanceled(_orderID);
+
+            revert("The seller has revoked access to their tokens to this contract");
+        }
+
+        if (token.balanceOf(ordersByID[_orderID].seller, ordersByID[_orderID].tokenID) >= ordersByID[_orderID].tokenAmount) {
+            ordersByID[_orderID].state = OrderState.ERROR_AMOUNT;
+
+            emit SellOrderCanceled(_orderID);
+
+            revert("The seller doesn't have enough tokens");
+        }
+
+        (bool success, ) = msg.sender.call{value: msg.value - weiCost}("");
+        require(success);
+
+        ordersByID[_orderID].state = OrderState.DONE;
+
+        (success, ) = ordersByID[_orderID].seller.call{value: (weiCost * 99) / 100}("");
+        require(success);
+
+        token.safeTransferFrom(ordersByID[_orderID].seller, msg.sender, ordersByID[_orderID].tokenID, ordersByID[_orderID].tokenAmount, "");
+
+        emit SellOrderCompleted(_orderID, msg.sender);
+    }
+
+    function buyWithDAI(uint _orderID) public {
+        uint DAICost = (ordersByID[_orderID].price * 10 ** 36) / uint(getDAIPrice() * 10 ** 10);
+
+        require(ordersByID[_orderID].state == OrderState.OPEN, "The order is not available");
 
         if (ordersByID[_orderID].deadline <= block.timestamp) {
             ordersByID[_orderID].state = OrderState.TIME_ENDED;
@@ -139,24 +187,21 @@ contract NFTsMarketplace is AccessControlUpgradeable, ReentrancyGuardUpgradeable
             revert("The seller doesn't have enough tokens");
         }
 
-        (bool success, ) = msg.sender.call{value: msg.value - weiCost}("");
-        require(success);
+        ERC20 coin = ERC20(DAIAddress);
+
+        require(coin.allowance(msg.sender, address(this)) >= DAICost, "This contract is not allowed to transfer buyer's tokens");
 
         ordersByID[_orderID].state = OrderState.DONE;
 
-        (success, ) = ordersByID[_orderID].seller.call{value: (weiCost * 100) / 99}("");
-        require(success);
+        require(coin.transferFrom(msg.sender, address(this), (DAICost) / 100));
+        require(coin.transferFrom(msg.sender, ordersByID[_orderID].seller, (DAICost * 99) / 100));
 
         token.safeTransferFrom(ordersByID[_orderID].seller, msg.sender, ordersByID[_orderID].tokenID, ordersByID[_orderID].tokenAmount, "");
 
         emit SellOrderCompleted(_orderID, msg.sender);
     }
-
-    function buyWithDai() public {
-        
-    }
     
-    function buyWithLink() public {
+    function buyWithLINK(uint _orderID) public {
         
     }
 
