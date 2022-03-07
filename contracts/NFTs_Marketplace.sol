@@ -264,6 +264,14 @@ contract NFTsMarketplace is AccessControlUpgradeable, ReentrancyGuardUpgradeable
         LINKFeed = AggregatorV3Interface(_address);
     }
 
+    function setDAIAddress(address _address) public onlyRole(ADMIN_ROLE) {
+        DAIAddress = _address;
+    }
+
+    function setLINKAddress(address _address) public onlyRole(ADMIN_ROLE) {
+        LINKAddress = _address;
+    }
+
     function getETHPrice() private view returns (int) {
         ( , int price, , , ) = ETHFeed.latestRoundData();
         return price;
