@@ -3,7 +3,10 @@
  */
 require("dotenv").config();
 require('@nomiclabs/hardhat-waffle');
+require("@nomiclabs/hardhat-ethers");
+require("@nomiclabs/hardhat-etherscan");
 require('@openzeppelin/hardhat-upgrades');
+require('hardhat-deploy');
 require('solidity-coverage');
  
 module.exports = {
@@ -24,9 +27,12 @@ module.exports = {
         },
         hardhat: {
             forking: {
-              url: `https://eth-rinkeby.alchemyapi.io/v2/${process.env.ALCHEMY_KEY}`,
+              url: `https://eth-mainnet.alchemyapi.io/v2/${process.env.ALCHEMY_KEY}`,
               blockNumber: 10288039
             }
         }
+    },
+    etherscan: {
+        apiKey: process.env.ETHERSCAN_API_KEY
     }
 };
