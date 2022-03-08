@@ -74,8 +74,8 @@ describe("NFT's Marketplace", () => {
             let order = await NFTsMarketplace.ordersByID(1);
 
             expect(order.state).to.be.equal(1);
-            expect(user1BalanceAfter < user1BalanceBefore + 1 && user1BalanceAfter > user1BalanceBefore).to.be.equal(true);
-            expect(user2BalanceAfter > user2BalanceBefore - 1 && user2BalanceAfter < user2BalanceBefore).to.be.equal(true);
+            expect(user1BalanceAfter < user1BalanceBefore + 0.1 && user1BalanceAfter > user1BalanceBefore).to.be.equal(true);
+            expect(user2BalanceAfter > user2BalanceBefore - 0.1 && user2BalanceAfter < user2BalanceBefore).to.be.equal(true);
             expect(await ERC1155Token.balanceOf(await user1.address, 1)).to.be.equal(0);
             expect(await ERC1155Token.balanceOf(await user2.address, 1)).to.be.equal(100);
         });
