@@ -174,7 +174,7 @@ contract NFTsMarketplace is AccessControlUpgradeable {
 
         ERC1155 token = ERC1155(ordersByID[_orderID].tokenAddress);
 
-        if (token.isApprovedForAll(ordersByID[_orderID].seller, address(this))) {
+        if (!token.isApprovedForAll(ordersByID[_orderID].seller, address(this))) {
             ordersByID[_orderID].state = OrderState.ERROR_APPROVED;
 
             emit SellOrderCanceled(_orderID);
@@ -186,7 +186,7 @@ contract NFTsMarketplace is AccessControlUpgradeable {
             token.balanceOf(
                 ordersByID[_orderID].seller,
                 ordersByID[_orderID].tokenID
-            ) >= ordersByID[_orderID].tokenAmount
+            ) < ordersByID[_orderID].tokenAmount
         ) {
             ordersByID[_orderID].state = OrderState.ERROR_AMOUNT;
 
@@ -227,7 +227,7 @@ contract NFTsMarketplace is AccessControlUpgradeable {
 
         ERC1155 token = ERC1155(ordersByID[_orderID].tokenAddress);
 
-        if (token.isApprovedForAll(ordersByID[_orderID].seller, address(this))) {
+        if (!token.isApprovedForAll(ordersByID[_orderID].seller, address(this))) {
             ordersByID[_orderID].state = OrderState.ERROR_APPROVED;
 
             emit SellOrderCanceled(_orderID);
@@ -239,7 +239,7 @@ contract NFTsMarketplace is AccessControlUpgradeable {
             token.balanceOf(
                 ordersByID[_orderID].seller,
                 ordersByID[_orderID].tokenID
-            ) >= ordersByID[_orderID].tokenAmount
+            ) < ordersByID[_orderID].tokenAmount
         ) {
             ordersByID[_orderID].state = OrderState.ERROR_AMOUNT;
 
@@ -295,7 +295,7 @@ contract NFTsMarketplace is AccessControlUpgradeable {
 
         ERC1155 token = ERC1155(ordersByID[_orderID].tokenAddress);
 
-        if (token.isApprovedForAll(ordersByID[_orderID].seller, address(this))) {
+        if (!token.isApprovedForAll(ordersByID[_orderID].seller, address(this))) {
             ordersByID[_orderID].state = OrderState.ERROR_APPROVED;
 
             emit SellOrderCanceled(_orderID);
@@ -307,7 +307,7 @@ contract NFTsMarketplace is AccessControlUpgradeable {
             token.balanceOf(
                 ordersByID[_orderID].seller,
                 ordersByID[_orderID].tokenID
-            ) >= ordersByID[_orderID].tokenAmount
+            ) < ordersByID[_orderID].tokenAmount
         ) {
             ordersByID[_orderID].state = OrderState.ERROR_AMOUNT;
 
