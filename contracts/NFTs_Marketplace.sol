@@ -31,11 +31,11 @@ contract NFTsMarketplace is AccessControlUpgradeable {
         uint tokenAmount;
         uint deadline;
         uint price;
-        uint orderID;
+        uint ID;
         OrderState state;
     }
     
-    mapping(uint => Order) ordersByID;
+    mapping(uint => Order) public ordersByID;
 
     /// STATES
 
@@ -106,12 +106,12 @@ contract NFTsMarketplace is AccessControlUpgradeable {
         adminFee = 1;
         orderCount = 0;
 
-        ETHFeed = AggregatorV3Interface(0x8A753747A1Fa494EC906cE90E9f37563A8AF630e);
-        DAIFeed = AggregatorV3Interface(0x2bA49Aaa16E6afD2a993473cfB70Fa8559B523cF);
-        LINKFeed = AggregatorV3Interface(0xd8bD0a1cB028a31AA859A21A3758685a95dE4623);
+        ETHFeed = AggregatorV3Interface(0x5f4eC3Df9cbd43714FE2740f5E3616155c5b8419);
+        DAIFeed = AggregatorV3Interface(0xAed0c38402a5d19df6E4c03F4E2DceD6e29c1ee9);
+        LINKFeed = AggregatorV3Interface(0x2c1d072e956AFFC0D435Cb7AC38EF18d24d9127c);
 
-        DAIAddress = 0x95b58a6Bff3D14B7DB2f5cb5F0Ad413DC2940658;
-        LINKAddress = 0x01BE23585060835E02B77ef475b0Cc51aA1e0709;
+        DAIAddress = 0x6B175474E89094C44Da98b954EedeAC495271d0F;
+        LINKAddress = 0x514910771AF9Ca656af840dff83E8264EcF986CA;
     }
 
     function createNewOrder(
@@ -131,7 +131,7 @@ contract NFTsMarketplace is AccessControlUpgradeable {
             payable(msg.sender),
             _tokenID,
             _tokenAmount,
-            _deadline,
+            _deadline + block.timestamp,
             _price,
             orderCount,
             OrderState.OPEN
@@ -144,7 +144,7 @@ contract NFTsMarketplace is AccessControlUpgradeable {
             _tokenAddress,
             _tokenID,
             _tokenAmount,
-            _deadline,
+            _deadline + block.timestamp,
             _price
         );
     }
