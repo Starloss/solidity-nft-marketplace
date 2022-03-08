@@ -259,7 +259,8 @@ contract NFTsMarketplace is AccessControlUpgradeable {
 
         require(
             coin.transferFrom(
-                msg.sender, address(this),
+                msg.sender,
+                address(this),
                 (DAICost * adminFee) / 100
             )
         );
