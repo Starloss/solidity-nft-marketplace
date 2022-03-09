@@ -110,6 +110,25 @@ describe("NFT's Marketplace", () => {
             await expect(NFTsMarketplace.connect(Bob).buyWithETH(1, { value: parseEther("1") })).to.be.revertedWith("The seller doesn't have enough tokens");
         });
 
+        it("Should fail if the user buy a token with ETH and the order is canceled", async () => {
+            await NFTsMarketplace.connect(Alice).cancelOrder(1);
+            
+            await expect(NFTsMarketplace.connect(Bob).buyWithETH(1, { value: parseEther("1") })).to.be.revertedWith("The order is not available");
+        });
+
+        it("Should fail if the user buy a token with ETH and the order is done", async () => {
+            await NFTsMarketplace.connect(Alice).buyWithETH(1, { value: parseEther("1") });
+            
+            await expect(NFTsMarketplace.connect(Bob).buyWithETH(1, { value: parseEther("1") })).to.be.revertedWith("The order is not available");
+        });
+
+        it("Should fail if the user buy a token with ETH and the order expires", async () => {
+            await network.provider.send("evm_increaseTime", [604800]);
+            await network.provider.send("evm_mine");
+            
+            await expect(NFTsMarketplace.connect(Bob).buyWithETH(1, { value: parseEther("1") })).to.be.revertedWith("The order has reached his deadline");
+        });
+
         it("Should let the user buy a token listed with DAI", async () => {
             const DAIContract = await hre.ethers.getContractAt(DAIABI, DAIAddress);
             await hre.network.provider.request({
@@ -187,7 +206,59 @@ describe("NFT's Marketplace", () => {
             
             await DAIContract.connect(DAIOwner).transfer(Bob.address, DAIOwnerBalance);
             
-            await expect(NFTsMarketplace.connect(Bob).buyWithLINK(1)).to.be.revertedWith("This contract is not allowed to transfer buyer's tokens");
+            await expect(NFTsMarketplace.connect(Bob).buyWithDAI(1)).to.be.revertedWith("This contract is not allowed to transfer buyer's tokens");
+        });
+
+        it("Should fail if the user buy a token with DAI and the order is canceled", async () => {
+            const DAIContract = await hre.ethers.getContractAt(DAIABI, DAIAddress);
+            await hre.network.provider.request({
+                method: "hardhat_impersonateAccount",
+                params: ["0x9c123b167a5e2b712ab5eb369eaf0f8b20583b93"],
+            });
+            const DAIOwner = await ethers.getSigner("0x9c123b167a5e2b712ab5eb369eaf0f8b20583b93");
+            const DAIOwnerBalance = await DAIContract.balanceOf(DAIOwner.address);
+            
+            await DAIContract.connect(DAIOwner).transfer(Bob.address, DAIOwnerBalance);
+            await DAIContract.connect(Bob).approve(NFTsMarketplace.address, DAIOwnerBalance);
+
+            await NFTsMarketplace.connect(Alice).cancelOrder(1);
+            
+            await expect(NFTsMarketplace.connect(Bob).buyWithDAI(1)).to.be.revertedWith("The order is not available");
+        });
+
+        it("Should fail if the user buy a token with DAI and the order is done", async () => {
+            const DAIContract = await hre.ethers.getContractAt(DAIABI, DAIAddress);
+            await hre.network.provider.request({
+                method: "hardhat_impersonateAccount",
+                params: ["0x9c123b167a5e2b712ab5eb369eaf0f8b20583b93"],
+            });
+            const DAIOwner = await ethers.getSigner("0x9c123b167a5e2b712ab5eb369eaf0f8b20583b93");
+            const DAIOwnerBalance = await DAIContract.balanceOf(DAIOwner.address);
+            
+            await DAIContract.connect(DAIOwner).transfer(Bob.address, DAIOwnerBalance);
+            await DAIContract.connect(Bob).approve(NFTsMarketplace.address, DAIOwnerBalance);
+
+            await NFTsMarketplace.connect(Alice).buyWithETH(1, { value: parseEther("1") });
+            
+            await expect(NFTsMarketplace.connect(Bob).buyWithDAI(1)).to.be.revertedWith("The order is not available");
+        });
+
+        it("Should fail if the user buy a token with DAI and the order expires", async () => {
+            const DAIContract = await hre.ethers.getContractAt(DAIABI, DAIAddress);
+            await hre.network.provider.request({
+                method: "hardhat_impersonateAccount",
+                params: ["0x9c123b167a5e2b712ab5eb369eaf0f8b20583b93"],
+            });
+            const DAIOwner = await ethers.getSigner("0x9c123b167a5e2b712ab5eb369eaf0f8b20583b93");
+            const DAIOwnerBalance = await DAIContract.balanceOf(DAIOwner.address);
+            
+            await DAIContract.connect(DAIOwner).transfer(Bob.address, DAIOwnerBalance);
+            await DAIContract.connect(Bob).approve(NFTsMarketplace.address, DAIOwnerBalance);
+
+            await network.provider.send("evm_increaseTime", [604800]);
+            await network.provider.send("evm_mine");
+            
+            await expect(NFTsMarketplace.connect(Bob).buyWithDAI(1)).to.be.revertedWith("The order has reached his deadline");
         });
 
         it("Should let the user buy a token listed with LINK", async () => {
@@ -268,6 +339,58 @@ describe("NFT's Marketplace", () => {
             await LINKContract.connect(LINKOwner).transfer(Bob.address, LINKOwnerBalance);
             
             await expect(NFTsMarketplace.connect(Bob).buyWithLINK(1)).to.be.revertedWith("This contract is not allowed to transfer buyer's tokens");
+        });
+
+        it("Should fail if the user buy a token with LINK and the order is canceled", async () => {
+            const LINKContract = await hre.ethers.getContractAt(LINKABI, LINKAddress);
+            await hre.network.provider.request({
+                method: "hardhat_impersonateAccount",
+                params: ["0xDFd5293D8e347dFe59E90eFd55b2956a1343963d"],
+            });
+            const LINKOwner = await ethers.getSigner("0xDFd5293D8e347dFe59E90eFd55b2956a1343963d");
+            const LINKOwnerBalance = await LINKContract.balanceOf(LINKOwner.address);
+            
+            await LINKContract.connect(LINKOwner).transfer(Bob.address, LINKOwnerBalance);
+            await LINKContract.connect(Bob).approve(NFTsMarketplace.address, LINKOwnerBalance);
+            
+            await NFTsMarketplace.connect(Alice).cancelOrder(1);
+            
+            await expect(NFTsMarketplace.connect(Bob).buyWithLINK(1)).to.be.revertedWith("The order is not available");
+        });
+
+        it("Should fail if the user buy a token with LINK and the order is done", async () => {
+            const LINKContract = await hre.ethers.getContractAt(LINKABI, LINKAddress);
+            await hre.network.provider.request({
+                method: "hardhat_impersonateAccount",
+                params: ["0xDFd5293D8e347dFe59E90eFd55b2956a1343963d"],
+            });
+            const LINKOwner = await ethers.getSigner("0xDFd5293D8e347dFe59E90eFd55b2956a1343963d");
+            const LINKOwnerBalance = await LINKContract.balanceOf(LINKOwner.address);
+            
+            await LINKContract.connect(LINKOwner).transfer(Bob.address, LINKOwnerBalance);
+            await LINKContract.connect(Bob).approve(NFTsMarketplace.address, LINKOwnerBalance);
+            
+            await NFTsMarketplace.connect(Alice).buyWithETH(1, { value: parseEther("1") });
+            
+            await expect(NFTsMarketplace.connect(Bob).buyWithLINK(1)).to.be.revertedWith("The order is not available");
+        });
+
+        it("Should fail if the user buy a token with LINK and the order expires", async () => {
+            const LINKContract = await hre.ethers.getContractAt(LINKABI, LINKAddress);
+            await hre.network.provider.request({
+                method: "hardhat_impersonateAccount",
+                params: ["0xDFd5293D8e347dFe59E90eFd55b2956a1343963d"],
+            });
+            const LINKOwner = await ethers.getSigner("0xDFd5293D8e347dFe59E90eFd55b2956a1343963d");
+            const LINKOwnerBalance = await LINKContract.balanceOf(LINKOwner.address);
+            
+            await LINKContract.connect(LINKOwner).transfer(Bob.address, LINKOwnerBalance);
+            await LINKContract.connect(Bob).approve(NFTsMarketplace.address, LINKOwnerBalance);
+            
+            await network.provider.send("evm_increaseTime", [604800]);
+            await network.provider.send("evm_mine");
+            
+            await expect(NFTsMarketplace.connect(Bob).buyWithLINK(1)).to.be.revertedWith("The order has reached his deadline");
         });
     });
 
