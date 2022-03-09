@@ -25,10 +25,11 @@ contract NFTsMarketplace is AccessControlUpgradeable {
     AggregatorV3Interface internal LINKFeed;
 
     /**
-     *  @notice Variables used for getting the contract of DAI and LINK
+     *  @notice Variables used for getting the contract of DAI and LINK and the address for withdraw
      */
     address public DAIAddress;
     address public LINKAddress;
+    address public recipientAddress;
 
     /**
      *  @notice Bytes32 used for roles
@@ -156,6 +157,7 @@ contract NFTsMarketplace is AccessControlUpgradeable {
         __AccessControl_init();
 
         _grantRole(ADMIN_ROLE, msg.sender);
+        recipientAddress = msg.sender;
 
         adminFee = 1;
         orderCount = 0;
@@ -441,10 +443,18 @@ contract NFTsMarketplace is AccessControlUpgradeable {
     }
 
     /**
+     *  @notice Set function that allows the admin to set the admin fee
+     *  @param _recipientAddress is the address which will be the new recipient address
+     */
+    function setRecipientAddress(address _recipientAddress) external onlyRole(ADMIN_ROLE) {
+        recipientAddress = _recipientAddress;
+    }
+
+    /**
      *  @notice Function that allow the admin to withdraw all the funds
      */
     function withdraw() public onlyRole(ADMIN_ROLE) {
-        (bool success, ) = msg.sender.call{value: address(this).balance}("");
+        (bool success, ) = recipientAddress.call{value: address(this).balance}("");
         require(success);
     }
 

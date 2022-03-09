@@ -477,8 +477,18 @@ describe("NFT's Marketplace", () => {
             expect(contractBalanceAfterWithdraw == 0);
         });
 
-        it("Should fail if an non-admin user tries to set the admin fee", async () => {
+        it("Should fail if an non-admin user tries to withdraw", async () => {
             await expect(NFTsMarketplace.connect(Bob).withdraw()).to.be.revertedWith("AccessControl: account 0x3c44cdddb6a900fa2b585dd299e03d12fa4293bc is missing role 0xa49807205ce4d355092ef5a8a18f56e8913cf4a201fbe287825b095693c21775");
+        });
+
+        it("Should let set the recipient address", async () => {
+            await NFTsMarketplace.setRecipientAddress(Alice.address);
+
+            expect(await NFTsMarketplace.recipientAddress()).to.be.equal(Alice.address);
+        });
+
+        it("Should fail if an non-admin user tries to set the recipient address", async () => {
+            await expect(NFTsMarketplace.connect(Bob).setRecipientAddress(Bob.address)).to.be.revertedWith("AccessControl: account 0x3c44cdddb6a900fa2b585dd299e03d12fa4293bc is missing role 0xa49807205ce4d355092ef5a8a18f56e8913cf4a201fbe287825b095693c21775");
         });
     });
 
@@ -946,8 +956,18 @@ describe("NFT's Marketplace", () => {
                 expect(contractBalanceAfterWithdraw == 0);
             });
     
-            it("Should fail if an non-admin user tries to set the admin fee", async () => {
+            it("Should fail if an non-admin user tries to withdraw", async () => {
                 await expect(NFTsMarketplaceV2.connect(Bob).withdraw()).to.be.revertedWith("AccessControl: account 0x3c44cdddb6a900fa2b585dd299e03d12fa4293bc is missing role 0xa49807205ce4d355092ef5a8a18f56e8913cf4a201fbe287825b095693c21775");
+            });
+
+            it("Should let set the recipient address", async () => {
+                await NFTsMarketplaceV2.setRecipientAddress(Alice.address);
+    
+                expect(await NFTsMarketplaceV2.recipientAddress()).to.be.equal(Alice.address);
+            });
+    
+            it("Should fail if an non-admin user tries to set the recipient address", async () => {
+                await expect(NFTsMarketplaceV2.connect(Bob).setRecipientAddress(Bob.address)).to.be.revertedWith("AccessControl: account 0x3c44cdddb6a900fa2b585dd299e03d12fa4293bc is missing role 0xa49807205ce4d355092ef5a8a18f56e8913cf4a201fbe287825b095693c21775");
             });
         });
     });
