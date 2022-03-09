@@ -443,6 +443,43 @@ describe("NFT's Marketplace", () => {
 
             expect(adminFee).to.be.equal(10);
         });
+
+        it("Should fail if an non-admin user tries to set the admin fee", async () => {
+            await expect(NFTsMarketplace.connect(Bob).setAdminFee(10)).to.be.revertedWith("AccessControl: account 0x3c44cdddb6a900fa2b585dd299e03d12fa4293bc is missing role 0xa49807205ce4d355092ef5a8a18f56e8913cf4a201fbe287825b095693c21775");
+        });
+
+        it("Should fail if the admin tries to set the admin fee out of the range allowed", async () => {
+            await expect(NFTsMarketplace.setAdminFee(11)).to.be.revertedWith("Wrong fee!");
+        });
+
+        it("Should let withdraw", async () => {
+            await NFTsMarketplace.setAdminFee(10);
+
+            await ERC1155Token.mint(Alice.address, 1, 100);
+            await ERC1155Token.connect(Alice).setApprovalForAll(NFTsMarketplace.address, true);
+
+            await NFTsMarketplace.connect(Alice).createNewOrder(ERC1155Token.address, 1, 100, 259200, 10000);
+
+            let contractBalanceBefore = parseFloat(ethers.utils.formatEther(await provider.getBalance(NFTsMarketplace.address)));
+
+            await NFTsMarketplace.connect(Bob).buyWithETH(1, { value: parseEther("100") });
+
+            let contractBalanceAfter = parseFloat(ethers.utils.formatEther(await provider.getBalance(NFTsMarketplace.address)));
+            let ownerBalanceBefore = parseFloat(ethers.utils.formatEther(await provider.getBalance(owner.address)));
+            
+            await NFTsMarketplace.withdraw();
+            
+            let contractBalanceAfterWithdraw = parseFloat(ethers.utils.formatEther(await provider.getBalance(NFTsMarketplace.address)));
+            let ownerBalanceAfter = parseFloat(ethers.utils.formatEther(await provider.getBalance(owner.address)));
+
+            expect(contractBalanceAfter > contractBalanceBefore);
+            expect(ownerBalanceAfter > ownerBalanceBefore);
+            expect(contractBalanceAfterWithdraw == 0);
+        });
+
+        it("Should fail if an non-admin user tries to set the admin fee", async () => {
+            await expect(NFTsMarketplace.connect(Bob).withdraw()).to.be.revertedWith("AccessControl: account 0x3c44cdddb6a900fa2b585dd299e03d12fa4293bc is missing role 0xa49807205ce4d355092ef5a8a18f56e8913cf4a201fbe287825b095693c21775");
+        });
     });
 
     describe("Upgrading NFT's Marketplace", () => {
@@ -467,6 +504,450 @@ describe("NFT's Marketplace", () => {
 
             it("Should let use the V2 function", async () => {
                 expect(await NFTsMarketplaceV2.upgradeTest(1)).to.be.equal(3);
+            });
+        });
+    
+        describe("Seller actions", () => {
+            it("Should let the user create a sell order", async () => {
+                await ERC1155Token.mint(Alice.address, 1, 100);
+                await ERC1155Token.connect(Alice).setApprovalForAll(NFTsMarketplaceV2.address, true);
+    
+                await NFTsMarketplaceV2.connect(Alice).createNewOrder(ERC1155Token.address, 1, 100, 259200, 100);
+                const order = await NFTsMarketplaceV2.ordersByID(1);
+    
+                expect(await NFTsMarketplaceV2.orderCount()).to.be.equal(1);
+                expect(order.seller).to.be.equal(Alice.address);
+                expect(order.state).to.be.equal(0);
+            });
+    
+            it("Should fail if the user create a sell order without allow spends his tokens", async () => {
+                await ERC1155Token.mint(Alice.address, 1, 100);
+    
+                await expect(NFTsMarketplaceV2.connect(Alice).createNewOrder(ERC1155Token.address, 1, 100, 259200, 100)).to.be.revertedWith("This contract is not allowed to transfer sender's tokens");
+            });
+    
+            it("Should fail if the user create a sell order without enough tokens", async () => {
+                await ERC1155Token.mint(Alice.address, 1, 10);
+                await ERC1155Token.connect(Alice).setApprovalForAll(NFTsMarketplaceV2.address, true);
+    
+                await expect(NFTsMarketplaceV2.connect(Alice).createNewOrder(ERC1155Token.address, 1, 100, 259200, 100)).to.be.revertedWith("The user has not enough tokens");
+            });
+    
+            it("Should let the user cancel a own order", async () => {
+                await ERC1155Token.mint(Alice.address, 1, 100);
+                await ERC1155Token.connect(Alice).setApprovalForAll(NFTsMarketplaceV2.address, true);
+    
+                await NFTsMarketplaceV2.connect(Alice).createNewOrder(ERC1155Token.address, 1, 100, 259200, 100);
+                let order = await NFTsMarketplaceV2.ordersByID(1);
+    
+                await NFTsMarketplaceV2.connect(Alice).cancelOrder(order.ID);
+                order = await NFTsMarketplaceV2.ordersByID(1);
+    
+                expect(order.state).to.be.equal(2);
+            });
+    
+            it("Should fail if the user try to cancel the same order twice", async () => {
+                await ERC1155Token.mint(Alice.address, 1, 100);
+                await ERC1155Token.connect(Alice).setApprovalForAll(NFTsMarketplaceV2.address, true);
+    
+                await NFTsMarketplaceV2.connect(Alice).createNewOrder(ERC1155Token.address, 1, 100, 259200, 100);
+                await NFTsMarketplaceV2.connect(Alice).cancelOrder(1);
+    
+                await expect(NFTsMarketplaceV2.connect(Alice).cancelOrder(1)).to.be.revertedWith("The order is not available");
+            });
+    
+            it("Should fail if the user try to cancel after completed", async () => {
+                await ERC1155Token.mint(Alice.address, 1, 100);
+                await ERC1155Token.connect(Alice).setApprovalForAll(NFTsMarketplaceV2.address, true);
+    
+                await NFTsMarketplaceV2.connect(Alice).createNewOrder(ERC1155Token.address, 1, 100, 259200, 100);
+                await NFTsMarketplaceV2.connect(Bob).buyWithETH(1, { value: parseEther("1") });
+    
+                await expect(NFTsMarketplaceV2.connect(Alice).cancelOrder(1)).to.be.revertedWith("The order is not available");
+            });
+    
+            it("Should fail if an user tries to cancel another's order", async () => {
+                await ERC1155Token.mint(Alice.address, 1, 100);
+                await ERC1155Token.connect(Alice).setApprovalForAll(NFTsMarketplaceV2.address, true);
+    
+                await NFTsMarketplaceV2.connect(Alice).createNewOrder(ERC1155Token.address, 1, 100, 259200, 100);
+    
+                await expect(NFTsMarketplaceV2.connect(Bob).cancelOrder(1)).to.be.revertedWith("You are not the owner of this order");
+            });
+        });
+    
+        describe("Buyer actions", () => {
+            beforeEach(async () => {
+                await ERC1155Token.mint(Alice.address, 1, 100);
+                await ERC1155Token.connect(Alice).setApprovalForAll(NFTsMarketplaceV2.address, true);
+    
+                await NFTsMarketplaceV2.connect(Alice).createNewOrder(ERC1155Token.address, 1, 100, 259200, 100);
+            });
+    
+            it("Should let the user buy a token listed with ETH", async () => {
+                let user1BalanceBefore = parseFloat(ethers.utils.formatEther(await provider.getBalance(Alice.address)));
+                let user2BalanceBefore = parseFloat(ethers.utils.formatEther(await provider.getBalance(Bob.address)));
+                let contractBalanceBefore = parseFloat(ethers.utils.formatEther(await provider.getBalance(NFTsMarketplaceV2.address)));
+    
+                await NFTsMarketplaceV2.connect(Bob).buyWithETH(1, { value: parseEther("1") });
+    
+                let user1BalanceAfter = parseFloat(ethers.utils.formatEther(await provider.getBalance(Alice.address)));
+                let user2BalanceAfter = parseFloat(ethers.utils.formatEther(await provider.getBalance(Bob.address)));
+                let contractBalanceAfter = parseFloat(ethers.utils.formatEther(await provider.getBalance(NFTsMarketplaceV2.address)));
+                
+                let order = await NFTsMarketplaceV2.ordersByID(1);
+    
+                expect(order.state).to.be.equal(1);
+                expect(user1BalanceAfter < user1BalanceBefore + 0.1 && user1BalanceAfter > user1BalanceBefore).to.be.equal(true);
+                expect(user2BalanceAfter > user2BalanceBefore - 0.1 && user2BalanceAfter < user2BalanceBefore).to.be.equal(true);
+                expect(contractBalanceAfter > contractBalanceBefore).to.be.equal(true);
+                expect(await ERC1155Token.balanceOf(Alice.address, 1)).to.be.equal(0);
+                expect(await ERC1155Token.balanceOf(Bob.address, 1)).to.be.equal(100);
+            });
+    
+            it("Should fail if the user buy a token with ETH and doesn't send enough ETH", async () => {
+                await expect(NFTsMarketplaceV2.connect(Bob).buyWithETH(1, { value: "1" })).to.be.revertedWith("Not enough ETH sended for this transaction");
+            });
+    
+            it("Should fail if the user buy a token with ETH and the seller has revoked the contract access to the tokens", async () => {
+                await ERC1155Token.connect(Alice).setApprovalForAll(NFTsMarketplaceV2.address, false);
+                
+                await expect(NFTsMarketplaceV2.connect(Bob).buyWithETH(1, { value: parseEther("1") })).to.be.revertedWith("The seller has revoked access to their tokens to this contract");
+            });
+    
+            it("Should fail if the user buy a token with ETH and the seller doesn't have enough", async () => {
+                await ERC1155Token.connect(Alice).burn(1, 100);
+                
+                await expect(NFTsMarketplaceV2.connect(Bob).buyWithETH(1, { value: parseEther("1") })).to.be.revertedWith("The seller doesn't have enough tokens");
+            });
+    
+            it("Should fail if the user buy a token with ETH and the order is canceled", async () => {
+                await NFTsMarketplaceV2.connect(Alice).cancelOrder(1);
+                
+                await expect(NFTsMarketplaceV2.connect(Bob).buyWithETH(1, { value: parseEther("1") })).to.be.revertedWith("The order is not available");
+            });
+    
+            it("Should fail if the user buy a token with ETH and the order is done", async () => {
+                await NFTsMarketplaceV2.connect(Alice).buyWithETH(1, { value: parseEther("1") });
+                
+                await expect(NFTsMarketplaceV2.connect(Bob).buyWithETH(1, { value: parseEther("1") })).to.be.revertedWith("The order is not available");
+            });
+    
+            it("Should fail if the user buy a token with ETH and the order expires", async () => {
+                await network.provider.send("evm_increaseTime", [604800]);
+                await network.provider.send("evm_mine");
+                
+                await expect(NFTsMarketplaceV2.connect(Bob).buyWithETH(1, { value: parseEther("1") })).to.be.revertedWith("The order has reached his deadline");
+            });
+    
+            it("Should let the user buy a token listed with DAI", async () => {
+                const DAIContract = await hre.ethers.getContractAt(DAIABI, DAIAddress);
+                await hre.network.provider.request({
+                    method: "hardhat_impersonateAccount",
+                    params: ["0x9c123b167a5e2b712ab5eb369eaf0f8b20583b93"],
+                });
+                const DAIOwner = await ethers.getSigner("0x9c123b167a5e2b712ab5eb369eaf0f8b20583b93");
+                const DAIOwnerBalance = await DAIContract.balanceOf(DAIOwner.address);
+                
+                await DAIContract.connect(DAIOwner).transfer(Bob.address, DAIOwnerBalance);
+                await DAIContract.connect(Bob).approve(NFTsMarketplaceV2.address, DAIOwnerBalance);
+    
+                let user1BalanceBefore = await DAIContract.balanceOf(Alice.address);
+                let user2BalanceBefore = await DAIContract.balanceOf(Bob.address);
+                let contractBalanceBefore = await DAIContract.balanceOf(await NFTsMarketplaceV2.address);
+                
+                await NFTsMarketplaceV2.connect(Bob).buyWithDAI(1);
+                
+                let user1BalanceAfter = await DAIContract.balanceOf(Alice.address);
+                let user2BalanceAfter = await DAIContract.balanceOf(Bob.address);
+                let contractBalanceAfter = await DAIContract.balanceOf(await NFTsMarketplaceV2.address);
+    
+                let order = await NFTsMarketplaceV2.ordersByID(1);
+    
+                expect(order.state).to.be.equal(1);
+                expect(user1BalanceAfter > user1BalanceBefore).to.be.equal(true);
+                expect(user2BalanceAfter < user2BalanceBefore).to.be.equal(true);
+                expect(contractBalanceAfter > contractBalanceBefore).to.be.equal(true);
+                expect(await ERC1155Token.balanceOf(Alice.address, 1)).to.be.equal(0);
+                expect(await ERC1155Token.balanceOf(Bob.address, 1)).to.be.equal(100);
+            });
+    
+            it("Should fail if the user buy a token with DAI and the seller has revoked the contract access to the tokens", async () => {
+                const DAIContract = await hre.ethers.getContractAt(DAIABI, DAIAddress);
+                await hre.network.provider.request({
+                    method: "hardhat_impersonateAccount",
+                    params: ["0x9c123b167a5e2b712ab5eb369eaf0f8b20583b93"],
+                });
+                const DAIOwner = await ethers.getSigner("0x9c123b167a5e2b712ab5eb369eaf0f8b20583b93");
+                const DAIOwnerBalance = await DAIContract.balanceOf(DAIOwner.address);
+                
+                await DAIContract.connect(DAIOwner).transfer(Bob.address, DAIOwnerBalance);
+                await DAIContract.connect(Bob).approve(NFTsMarketplaceV2.address, DAIOwnerBalance);
+    
+                await ERC1155Token.connect(Alice).setApprovalForAll(NFTsMarketplaceV2.address, false);
+                
+                await expect(NFTsMarketplaceV2.connect(Bob).buyWithDAI(1)).to.be.revertedWith("The seller has revoked access to their tokens to this contract");
+            });
+    
+            it("Should fail if the user buy a token with DAI and the seller doesn't have enough", async () => {
+                const DAIContract = await hre.ethers.getContractAt(DAIABI, DAIAddress);
+                await hre.network.provider.request({
+                    method: "hardhat_impersonateAccount",
+                    params: ["0x9c123b167a5e2b712ab5eb369eaf0f8b20583b93"],
+                });
+                const DAIOwner = await ethers.getSigner("0x9c123b167a5e2b712ab5eb369eaf0f8b20583b93");
+                const DAIOwnerBalance = await DAIContract.balanceOf(DAIOwner.address);
+                
+                await DAIContract.connect(DAIOwner).transfer(Bob.address, DAIOwnerBalance);
+                await DAIContract.connect(Bob).approve(NFTsMarketplaceV2.address, DAIOwnerBalance);
+    
+                await ERC1155Token.connect(Alice).burn(1, 100);
+                
+                await expect(NFTsMarketplaceV2.connect(Bob).buyWithDAI(1)).to.be.revertedWith("The seller doesn't have enough tokens");
+            });
+    
+            it("Should fail if the user buy a token with DAI and doesn't allow spend his tokens", async () => {
+                const DAIContract = await hre.ethers.getContractAt(DAIABI, DAIAddress);
+                await hre.network.provider.request({
+                    method: "hardhat_impersonateAccount",
+                    params: ["0x9c123b167a5e2b712ab5eb369eaf0f8b20583b93"],
+                });
+                const DAIOwner = await ethers.getSigner("0x9c123b167a5e2b712ab5eb369eaf0f8b20583b93");
+                const DAIOwnerBalance = await DAIContract.balanceOf(DAIOwner.address);
+                
+                await DAIContract.connect(DAIOwner).transfer(Bob.address, DAIOwnerBalance);
+                
+                await expect(NFTsMarketplaceV2.connect(Bob).buyWithDAI(1)).to.be.revertedWith("This contract is not allowed to transfer buyer's tokens");
+            });
+    
+            it("Should fail if the user buy a token with DAI and the order is canceled", async () => {
+                const DAIContract = await hre.ethers.getContractAt(DAIABI, DAIAddress);
+                await hre.network.provider.request({
+                    method: "hardhat_impersonateAccount",
+                    params: ["0x9c123b167a5e2b712ab5eb369eaf0f8b20583b93"],
+                });
+                const DAIOwner = await ethers.getSigner("0x9c123b167a5e2b712ab5eb369eaf0f8b20583b93");
+                const DAIOwnerBalance = await DAIContract.balanceOf(DAIOwner.address);
+                
+                await DAIContract.connect(DAIOwner).transfer(Bob.address, DAIOwnerBalance);
+                await DAIContract.connect(Bob).approve(NFTsMarketplaceV2.address, DAIOwnerBalance);
+    
+                await NFTsMarketplaceV2.connect(Alice).cancelOrder(1);
+                
+                await expect(NFTsMarketplaceV2.connect(Bob).buyWithDAI(1)).to.be.revertedWith("The order is not available");
+            });
+    
+            it("Should fail if the user buy a token with DAI and the order is done", async () => {
+                const DAIContract = await hre.ethers.getContractAt(DAIABI, DAIAddress);
+                await hre.network.provider.request({
+                    method: "hardhat_impersonateAccount",
+                    params: ["0x9c123b167a5e2b712ab5eb369eaf0f8b20583b93"],
+                });
+                const DAIOwner = await ethers.getSigner("0x9c123b167a5e2b712ab5eb369eaf0f8b20583b93");
+                const DAIOwnerBalance = await DAIContract.balanceOf(DAIOwner.address);
+                
+                await DAIContract.connect(DAIOwner).transfer(Bob.address, DAIOwnerBalance);
+                await DAIContract.connect(Bob).approve(NFTsMarketplaceV2.address, DAIOwnerBalance);
+    
+                await NFTsMarketplaceV2.connect(Alice).buyWithETH(1, { value: parseEther("1") });
+                
+                await expect(NFTsMarketplaceV2.connect(Bob).buyWithDAI(1)).to.be.revertedWith("The order is not available");
+            });
+    
+            it("Should fail if the user buy a token with DAI and the order expires", async () => {
+                const DAIContract = await hre.ethers.getContractAt(DAIABI, DAIAddress);
+                await hre.network.provider.request({
+                    method: "hardhat_impersonateAccount",
+                    params: ["0x9c123b167a5e2b712ab5eb369eaf0f8b20583b93"],
+                });
+                const DAIOwner = await ethers.getSigner("0x9c123b167a5e2b712ab5eb369eaf0f8b20583b93");
+                const DAIOwnerBalance = await DAIContract.balanceOf(DAIOwner.address);
+                
+                await DAIContract.connect(DAIOwner).transfer(Bob.address, DAIOwnerBalance);
+                await DAIContract.connect(Bob).approve(NFTsMarketplaceV2.address, DAIOwnerBalance);
+    
+                await network.provider.send("evm_increaseTime", [604800]);
+                await network.provider.send("evm_mine");
+                
+                await expect(NFTsMarketplaceV2.connect(Bob).buyWithDAI(1)).to.be.revertedWith("The order has reached his deadline");
+            });
+    
+            it("Should let the user buy a token listed with LINK", async () => {
+                const LINKContract = await hre.ethers.getContractAt(LINKABI, LINKAddress);
+                await hre.network.provider.request({
+                    method: "hardhat_impersonateAccount",
+                    params: ["0xDFd5293D8e347dFe59E90eFd55b2956a1343963d"],
+                });
+                const LINKOwner = await ethers.getSigner("0xDFd5293D8e347dFe59E90eFd55b2956a1343963d");
+                const LINKOwnerBalance = await LINKContract.balanceOf(LINKOwner.address);
+                
+                await LINKContract.connect(LINKOwner).transfer(Bob.address, LINKOwnerBalance);
+                await LINKContract.connect(Bob).approve(NFTsMarketplaceV2.address, LINKOwnerBalance);
+    
+                let user1BalanceBefore = await LINKContract.balanceOf(Alice.address);
+                let user2BalanceBefore = await LINKContract.balanceOf(Bob.address);
+                let contractBalanceBefore = await LINKContract.balanceOf(await NFTsMarketplaceV2.address);
+                
+                await NFTsMarketplaceV2.connect(Bob).buyWithLINK(1);
+                
+                let user1BalanceAfter = await LINKContract.balanceOf(Alice.address);
+                let user2BalanceAfter = await LINKContract.balanceOf(Bob.address);
+                let contractBalanceAfter = await LINKContract.balanceOf(await NFTsMarketplaceV2.address);
+    
+                let order = await NFTsMarketplaceV2.ordersByID(1);
+    
+                expect(order.state).to.be.equal(1);
+                expect(user1BalanceAfter > user1BalanceBefore).to.be.equal(true);
+                expect(user2BalanceAfter < user2BalanceBefore).to.be.equal(true);
+                expect(contractBalanceAfter > contractBalanceBefore).to.be.equal(true);
+                expect(await ERC1155Token.balanceOf(Alice.address, 1)).to.be.equal(0);
+                expect(await ERC1155Token.balanceOf(Bob.address, 1)).to.be.equal(100);
+            });
+    
+            it("Should fail if the user buy a token with LINK and the seller has revoked the contract access to the tokens", async () => {
+                const LINKContract = await hre.ethers.getContractAt(LINKABI, LINKAddress);
+                await hre.network.provider.request({
+                    method: "hardhat_impersonateAccount",
+                    params: ["0xDFd5293D8e347dFe59E90eFd55b2956a1343963d"],
+                });
+                const LINKOwner = await ethers.getSigner("0xDFd5293D8e347dFe59E90eFd55b2956a1343963d");
+                const LINKOwnerBalance = await LINKContract.balanceOf(LINKOwner.address);
+                
+                await LINKContract.connect(LINKOwner).transfer(Bob.address, LINKOwnerBalance);
+                await LINKContract.connect(Bob).approve(NFTsMarketplaceV2.address, LINKOwnerBalance);
+    
+                await ERC1155Token.connect(Alice).setApprovalForAll(NFTsMarketplaceV2.address, false);
+                
+                await expect(NFTsMarketplaceV2.connect(Bob).buyWithLINK(1)).to.be.revertedWith("The seller has revoked access to their tokens to this contract");
+            });
+    
+            it("Should fail if the user buy a token with LINK and the seller doesn't have enough", async () => {
+                const LINKContract = await hre.ethers.getContractAt(LINKABI, LINKAddress);
+                await hre.network.provider.request({
+                    method: "hardhat_impersonateAccount",
+                    params: ["0xDFd5293D8e347dFe59E90eFd55b2956a1343963d"],
+                });
+                const LINKOwner = await ethers.getSigner("0xDFd5293D8e347dFe59E90eFd55b2956a1343963d");
+                const LINKOwnerBalance = await LINKContract.balanceOf(LINKOwner.address);
+                
+                await LINKContract.connect(LINKOwner).transfer(Bob.address, LINKOwnerBalance);
+                await LINKContract.connect(Bob).approve(NFTsMarketplaceV2.address, LINKOwnerBalance);
+    
+                await ERC1155Token.connect(Alice).burn(1, 100);
+                
+                await expect(NFTsMarketplaceV2.connect(Bob).buyWithLINK(1)).to.be.revertedWith("The seller doesn't have enough tokens");
+            });
+    
+            it("Should fail if the user buy a token with LINK and doesn't allow spend his tokens", async () => {
+                const LINKContract = await hre.ethers.getContractAt(LINKABI, LINKAddress);
+                await hre.network.provider.request({
+                    method: "hardhat_impersonateAccount",
+                    params: ["0xDFd5293D8e347dFe59E90eFd55b2956a1343963d"],
+                });
+                const LINKOwner = await ethers.getSigner("0xDFd5293D8e347dFe59E90eFd55b2956a1343963d");
+                const LINKOwnerBalance = await LINKContract.balanceOf(LINKOwner.address);
+                
+                await LINKContract.connect(LINKOwner).transfer(Bob.address, LINKOwnerBalance);
+                
+                await expect(NFTsMarketplaceV2.connect(Bob).buyWithLINK(1)).to.be.revertedWith("This contract is not allowed to transfer buyer's tokens");
+            });
+    
+            it("Should fail if the user buy a token with LINK and the order is canceled", async () => {
+                const LINKContract = await hre.ethers.getContractAt(LINKABI, LINKAddress);
+                await hre.network.provider.request({
+                    method: "hardhat_impersonateAccount",
+                    params: ["0xDFd5293D8e347dFe59E90eFd55b2956a1343963d"],
+                });
+                const LINKOwner = await ethers.getSigner("0xDFd5293D8e347dFe59E90eFd55b2956a1343963d");
+                const LINKOwnerBalance = await LINKContract.balanceOf(LINKOwner.address);
+                
+                await LINKContract.connect(LINKOwner).transfer(Bob.address, LINKOwnerBalance);
+                await LINKContract.connect(Bob).approve(NFTsMarketplaceV2.address, LINKOwnerBalance);
+    
+                await NFTsMarketplaceV2.connect(Alice).cancelOrder(1);
+                
+                await expect(NFTsMarketplaceV2.connect(Bob).buyWithLINK(1)).to.be.revertedWith("The order is not available");
+            });
+    
+            it("Should fail if the user buy a token with LINK and the order is done", async () => {
+                const LINKContract = await hre.ethers.getContractAt(LINKABI, LINKAddress);
+                await hre.network.provider.request({
+                    method: "hardhat_impersonateAccount",
+                    params: ["0xDFd5293D8e347dFe59E90eFd55b2956a1343963d"],
+                });
+                const LINKOwner = await ethers.getSigner("0xDFd5293D8e347dFe59E90eFd55b2956a1343963d");
+                const LINKOwnerBalance = await LINKContract.balanceOf(LINKOwner.address);
+                
+                await LINKContract.connect(LINKOwner).transfer(Bob.address, LINKOwnerBalance);
+                await LINKContract.connect(Bob).approve(NFTsMarketplaceV2.address, LINKOwnerBalance);
+    
+                await NFTsMarketplaceV2.connect(Alice).buyWithETH(1, { value: parseEther("1") });
+                
+                await expect(NFTsMarketplaceV2.connect(Bob).buyWithLINK(1)).to.be.revertedWith("The order is not available");
+            });
+    
+            it("Should fail if the user buy a token with LINK and the order expires", async () => {
+                const LINKContract = await hre.ethers.getContractAt(LINKABI, LINKAddress);
+                await hre.network.provider.request({
+                    method: "hardhat_impersonateAccount",
+                    params: ["0xDFd5293D8e347dFe59E90eFd55b2956a1343963d"],
+                });
+                const LINKOwner = await ethers.getSigner("0xDFd5293D8e347dFe59E90eFd55b2956a1343963d");
+                const LINKOwnerBalance = await LINKContract.balanceOf(LINKOwner.address);
+                
+                await LINKContract.connect(LINKOwner).transfer(Bob.address, LINKOwnerBalance);
+                await LINKContract.connect(Bob).approve(NFTsMarketplaceV2.address, LINKOwnerBalance);
+    
+                await network.provider.send("evm_increaseTime", [604800]);
+                await network.provider.send("evm_mine");
+                
+                await expect(NFTsMarketplaceV2.connect(Bob).buyWithLINK(1)).to.be.revertedWith("The order has reached his deadline");
+            });
+        });
+    
+        describe('Owner actions', () => { 
+            it("Should let set the admin fee", async () => {
+                await NFTsMarketplaceV2.setAdminFee(10);
+                let adminFee = await NFTsMarketplaceV2.adminFee();
+    
+                expect(adminFee).to.be.equal(10);
+            });
+    
+            it("Should fail if an non-admin user tries to set the admin fee", async () => {
+                await expect(NFTsMarketplaceV2.connect(Bob).setAdminFee(10)).to.be.revertedWith("AccessControl: account 0x3c44cdddb6a900fa2b585dd299e03d12fa4293bc is missing role 0xa49807205ce4d355092ef5a8a18f56e8913cf4a201fbe287825b095693c21775");
+            });
+    
+            it("Should fail if the admin tries to set the admin fee out of the range allowed", async () => {
+                await expect(NFTsMarketplaceV2.setAdminFee(11)).to.be.revertedWith("Wrong fee!");
+            });
+    
+            it("Should let withdraw", async () => {
+                await NFTsMarketplaceV2.setAdminFee(10);
+    
+                await ERC1155Token.mint(Alice.address, 1, 100);
+                await ERC1155Token.connect(Alice).setApprovalForAll(NFTsMarketplaceV2.address, true);
+    
+                await NFTsMarketplaceV2.connect(Alice).createNewOrder(ERC1155Token.address, 1, 100, 259200, 10000);
+    
+                let contractBalanceBefore = parseFloat(ethers.utils.formatEther(await provider.getBalance(NFTsMarketplaceV2.address)));
+    
+                await NFTsMarketplaceV2.connect(Bob).buyWithETH(1, { value: parseEther("100") });
+    
+                let contractBalanceAfter = parseFloat(ethers.utils.formatEther(await provider.getBalance(NFTsMarketplaceV2.address)));
+                let ownerBalanceBefore = parseFloat(ethers.utils.formatEther(await provider.getBalance(owner.address)));
+                
+                await NFTsMarketplaceV2.withdraw();
+                
+                let contractBalanceAfterWithdraw = parseFloat(ethers.utils.formatEther(await provider.getBalance(NFTsMarketplaceV2.address)));
+                let ownerBalanceAfter = parseFloat(ethers.utils.formatEther(await provider.getBalance(owner.address)));
+    
+                expect(contractBalanceAfter > contractBalanceBefore);
+                expect(ownerBalanceAfter > ownerBalanceBefore);
+                expect(contractBalanceAfterWithdraw == 0);
+            });
+    
+            it("Should fail if an non-admin user tries to set the admin fee", async () => {
+                await expect(NFTsMarketplaceV2.connect(Bob).withdraw()).to.be.revertedWith("AccessControl: account 0x3c44cdddb6a900fa2b585dd299e03d12fa4293bc is missing role 0xa49807205ce4d355092ef5a8a18f56e8913cf4a201fbe287825b095693c21775");
             });
         });
     });
