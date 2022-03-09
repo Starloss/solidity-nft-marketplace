@@ -39,7 +39,7 @@ contract NFTsMarketplace is AccessControlUpgradeable {
 
     /// STATES
 
-    enum OrderState {OPEN, DONE, CANCELED, ERROR_APPROVED, ERROR_AMOUNT, TIME_ENDED}
+    enum OrderState {OPEN, DONE, CANCELED}
 
     /// EVENTS
     /**
@@ -70,6 +70,10 @@ contract NFTsMarketplace is AccessControlUpgradeable {
         require(
             ordersByID[_orderID].state == OrderState.OPEN,
             "The order is not available"
+        );
+        require(
+            ordersByID[_orderID].deadline > block.timestamp,
+            "The order has reached his deadline"
         );
         _;
     }
@@ -106,12 +110,12 @@ contract NFTsMarketplace is AccessControlUpgradeable {
         adminFee = 1;
         orderCount = 0;
 
-        ETHFeed = AggregatorV3Interface(0x5f4eC3Df9cbd43714FE2740f5E3616155c5b8419);
-        DAIFeed = AggregatorV3Interface(0xAed0c38402a5d19df6E4c03F4E2DceD6e29c1ee9);
-        LINKFeed = AggregatorV3Interface(0x2c1d072e956AFFC0D435Cb7AC38EF18d24d9127c);
+        setETHFeed(0x5f4eC3Df9cbd43714FE2740f5E3616155c5b8419);
+        setDAIFeed(0xAed0c38402a5d19df6E4c03F4E2DceD6e29c1ee9);
+        setLINKFeed(0x2c1d072e956AFFC0D435Cb7AC38EF18d24d9127c);
 
-        DAIAddress = 0x6B175474E89094C44Da98b954EedeAC495271d0F;
-        LINKAddress = 0x514910771AF9Ca656af840dff83E8264EcF986CA;
+        setDAIAddress(0x6B175474E89094C44Da98b954EedeAC495271d0F);
+        setLINKAddress(0x514910771AF9Ca656af840dff83E8264EcF986CA);
     }
 
     function createNewOrder(
@@ -164,36 +168,20 @@ contract NFTsMarketplace is AccessControlUpgradeable {
 
         require(msg.value >= weiCost, "Not enough ETH sended for this transaction");
 
-        if (ordersByID[_orderID].deadline <= block.timestamp) {
-            ordersByID[_orderID].state = OrderState.TIME_ENDED;
-            
-            emit SellOrderCanceled(_orderID);
-            
-            revert("The order has reached his deadline");
-        }
-
         ERC1155 token = ERC1155(ordersByID[_orderID].tokenAddress);
 
-        if (!token.isApprovedForAll(ordersByID[_orderID].seller, address(this))) {
-            ordersByID[_orderID].state = OrderState.ERROR_APPROVED;
+        require(
+            token.isApprovedForAll(ordersByID[_orderID].seller, address(this)),
+            "The seller has revoked access to their tokens to this contract"
+        );
 
-            emit SellOrderCanceled(_orderID);
-
-            revert("The seller has revoked access to their tokens to this contract");
-        }
-
-        if (
+        require(
             token.balanceOf(
                 ordersByID[_orderID].seller,
                 ordersByID[_orderID].tokenID
-            ) < ordersByID[_orderID].tokenAmount
-        ) {
-            ordersByID[_orderID].state = OrderState.ERROR_AMOUNT;
-
-            emit SellOrderCanceled(_orderID);
-
-            revert("The seller doesn't have enough tokens");
-        }
+            ) >= ordersByID[_orderID].tokenAmount,
+            "The seller doesn't have enough tokens"
+        );
 
         (bool success, ) = msg.sender.call{value: msg.value - weiCost}("");
         require(success);
@@ -217,36 +205,20 @@ contract NFTsMarketplace is AccessControlUpgradeable {
     function buyWithDAI(uint _orderID) public orderIsAvailable(_orderID) {
         uint DAICost = (ordersByID[_orderID].price * 10 ** 36) / uint(getDAIPrice() * 10 ** 10);
 
-        if (ordersByID[_orderID].deadline <= block.timestamp) {
-            ordersByID[_orderID].state = OrderState.TIME_ENDED;
-            
-            emit SellOrderCanceled(_orderID);
-            
-            revert("The order has reached his deadline");
-        }
-
         ERC1155 token = ERC1155(ordersByID[_orderID].tokenAddress);
 
-        if (!token.isApprovedForAll(ordersByID[_orderID].seller, address(this))) {
-            ordersByID[_orderID].state = OrderState.ERROR_APPROVED;
+        require(
+            token.isApprovedForAll(ordersByID[_orderID].seller, address(this)),
+            "The seller has revoked access to their tokens to this contract"
+        );
 
-            emit SellOrderCanceled(_orderID);
-
-            revert("The seller has revoked access to their tokens to this contract");
-        }
-
-        if (
+        require(
             token.balanceOf(
                 ordersByID[_orderID].seller,
                 ordersByID[_orderID].tokenID
-            ) < ordersByID[_orderID].tokenAmount
-        ) {
-            ordersByID[_orderID].state = OrderState.ERROR_AMOUNT;
-
-            emit SellOrderCanceled(_orderID);
-            
-            revert("The seller doesn't have enough tokens");
-        }
+            ) >= ordersByID[_orderID].tokenAmount,
+            "The seller doesn't have enough tokens"
+        );
 
         ERC20 coin = ERC20(DAIAddress);
 
@@ -286,36 +258,20 @@ contract NFTsMarketplace is AccessControlUpgradeable {
     function buyWithLINK(uint _orderID) public orderIsAvailable(_orderID) {
         uint LINKCost = (ordersByID[_orderID].price * 10 ** 36) / uint(getLINKPrice() * 10 ** 10);
 
-        if (ordersByID[_orderID].deadline <= block.timestamp) {
-            ordersByID[_orderID].state = OrderState.TIME_ENDED;
-            
-            emit SellOrderCanceled(_orderID);
-            
-            revert("The order has reached his deadline");
-        }
-
         ERC1155 token = ERC1155(ordersByID[_orderID].tokenAddress);
 
-        if (!token.isApprovedForAll(ordersByID[_orderID].seller, address(this))) {
-            ordersByID[_orderID].state = OrderState.ERROR_APPROVED;
+        require(
+            token.isApprovedForAll(ordersByID[_orderID].seller, address(this)),
+            "The seller has revoked access to their tokens to this contract"
+        );
 
-            emit SellOrderCanceled(_orderID);
-
-            revert("The seller has revoked access to their tokens to this contract");
-        }
-
-        if (
+        require(
             token.balanceOf(
                 ordersByID[_orderID].seller,
                 ordersByID[_orderID].tokenID
-            ) < ordersByID[_orderID].tokenAmount
-        ) {
-            ordersByID[_orderID].state = OrderState.ERROR_AMOUNT;
-
-            emit SellOrderCanceled(_orderID);
-            
-            revert("The seller doesn't have enough tokens");
-        }
+            ) >= ordersByID[_orderID].tokenAmount,
+            "The seller doesn't have enough tokens"
+        );
 
         ERC20 coin = ERC20(LINKAddress);
 
@@ -352,30 +308,30 @@ contract NFTsMarketplace is AccessControlUpgradeable {
         emit SellOrderCompleted(_orderID, msg.sender);
     }
 
+    function setETHFeed(address _address) public onlyRole(ADMIN_ROLE) {
+        ETHFeed = AggregatorV3Interface(_address);
+    }
+
+    function setDAIFeed(address _address) public onlyRole(ADMIN_ROLE) {
+        DAIFeed = AggregatorV3Interface(_address);
+    }
+
+    function setLINKFeed(address _address) public onlyRole(ADMIN_ROLE) {
+        LINKFeed = AggregatorV3Interface(_address);
+    }
+
+    function setDAIAddress(address _address) public onlyRole(ADMIN_ROLE) {
+        DAIAddress = _address;
+    }
+
+    function setLINKAddress(address _address) public onlyRole(ADMIN_ROLE) {
+        LINKAddress = _address;
+    }
+
     function setAdminFee(uint _adminFee) external onlyRole(ADMIN_ROLE) {
         require(_adminFee >= 0 && _adminFee <= 10, "Wrong fee!");
 
         adminFee = _adminFee;
-    }
-
-    function setETHFedd(address _address) external onlyRole(ADMIN_ROLE) {
-        ETHFeed = AggregatorV3Interface(_address);
-    }
-
-    function setDAIFedd(address _address) external onlyRole(ADMIN_ROLE) {
-        DAIFeed = AggregatorV3Interface(_address);
-    }
-
-    function setLINKFedd(address _address) external onlyRole(ADMIN_ROLE) {
-        LINKFeed = AggregatorV3Interface(_address);
-    }
-
-    function setDAIAddress(address _address) external onlyRole(ADMIN_ROLE) {
-        DAIAddress = _address;
-    }
-
-    function setLINKAddress(address _address) external onlyRole(ADMIN_ROLE) {
-        LINKAddress = _address;
     }
 
     function isAdmin(address _address) external view returns (bool) {
