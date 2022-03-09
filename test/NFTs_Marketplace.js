@@ -51,6 +51,19 @@ describe("NFT's Marketplace", () => {
             expect(order.state).to.be.equal(0);
         });
 
+        it("Should fail if the user create a sell order without allow spends his tokens", async () => {
+            await ERC1155Token.mint(Alice.address, 1, 100);
+
+            await expect(NFTsMarketplace.connect(Alice).createNewOrder(ERC1155Token.address, 1, 100, 259200, 100)).to.be.revertedWith("This contract is not allowed to transfer sender's tokens");
+        });
+
+        it("Should fail if the user create a sell order without enough tokens", async () => {
+            await ERC1155Token.mint(Alice.address, 1, 10);
+            await ERC1155Token.connect(Alice).setApprovalForAll(NFTsMarketplace.address, true);
+
+            await expect(NFTsMarketplace.connect(Alice).createNewOrder(ERC1155Token.address, 1, 100, 259200, 100)).to.be.revertedWith("The user has not enough tokens");
+        });
+
         it("Should let the user cancel a own order", async () => {
             await ERC1155Token.mint(Alice.address, 1, 100);
             await ERC1155Token.connect(Alice).setApprovalForAll(NFTsMarketplace.address, true);
@@ -63,6 +76,35 @@ describe("NFT's Marketplace", () => {
 
             expect(order.state).to.be.equal(2);
         });
+
+        it("Should fail if the user try to cancel the same order twice", async () => {
+            await ERC1155Token.mint(Alice.address, 1, 100);
+            await ERC1155Token.connect(Alice).setApprovalForAll(NFTsMarketplace.address, true);
+
+            await NFTsMarketplace.connect(Alice).createNewOrder(ERC1155Token.address, 1, 100, 259200, 100);
+            await NFTsMarketplace.connect(Alice).cancelOrder(1);
+
+            await expect(NFTsMarketplace.connect(Alice).cancelOrder(1)).to.be.revertedWith("The order is not available");
+        });
+
+        it("Should fail if the user try to cancel after completed", async () => {
+            await ERC1155Token.mint(Alice.address, 1, 100);
+            await ERC1155Token.connect(Alice).setApprovalForAll(NFTsMarketplace.address, true);
+
+            await NFTsMarketplace.connect(Alice).createNewOrder(ERC1155Token.address, 1, 100, 259200, 100);
+            await NFTsMarketplace.connect(Bob).buyWithETH(1, { value: parseEther("1") });
+
+            await expect(NFTsMarketplace.connect(Alice).cancelOrder(1)).to.be.revertedWith("The order is not available");
+        });
+
+        it("Should fail if an user tries to cancel another's order", async () => {
+            await ERC1155Token.mint(Alice.address, 1, 100);
+            await ERC1155Token.connect(Alice).setApprovalForAll(NFTsMarketplace.address, true);
+
+            await NFTsMarketplace.connect(Alice).createNewOrder(ERC1155Token.address, 1, 100, 259200, 100);
+
+            await expect(NFTsMarketplace.connect(Bob).cancelOrder(1)).to.be.revertedWith("You are not the owner of this order");
+        });
     });
 
     describe("Buyer actions", () => {
@@ -70,7 +112,7 @@ describe("NFT's Marketplace", () => {
             await ERC1155Token.mint(Alice.address, 1, 100);
             await ERC1155Token.connect(Alice).setApprovalForAll(NFTsMarketplace.address, true);
 
-            await NFTsMarketplace.connect(Alice).createNewOrder(ERC1155Token.address, 1, 100, 259200, 10);
+            await NFTsMarketplace.connect(Alice).createNewOrder(ERC1155Token.address, 1, 100, 259200, 100);
         });
 
         it("Should let the user buy a token listed with ETH", async () => {
@@ -352,7 +394,7 @@ describe("NFT's Marketplace", () => {
             
             await LINKContract.connect(LINKOwner).transfer(Bob.address, LINKOwnerBalance);
             await LINKContract.connect(Bob).approve(NFTsMarketplace.address, LINKOwnerBalance);
-            
+
             await NFTsMarketplace.connect(Alice).cancelOrder(1);
             
             await expect(NFTsMarketplace.connect(Bob).buyWithLINK(1)).to.be.revertedWith("The order is not available");
@@ -369,7 +411,7 @@ describe("NFT's Marketplace", () => {
             
             await LINKContract.connect(LINKOwner).transfer(Bob.address, LINKOwnerBalance);
             await LINKContract.connect(Bob).approve(NFTsMarketplace.address, LINKOwnerBalance);
-            
+
             await NFTsMarketplace.connect(Alice).buyWithETH(1, { value: parseEther("1") });
             
             await expect(NFTsMarketplace.connect(Bob).buyWithLINK(1)).to.be.revertedWith("The order is not available");
@@ -386,7 +428,7 @@ describe("NFT's Marketplace", () => {
             
             await LINKContract.connect(LINKOwner).transfer(Bob.address, LINKOwnerBalance);
             await LINKContract.connect(Bob).approve(NFTsMarketplace.address, LINKOwnerBalance);
-            
+
             await network.provider.send("evm_increaseTime", [604800]);
             await network.provider.send("evm_mine");
             
