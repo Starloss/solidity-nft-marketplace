@@ -334,6 +334,14 @@ contract NFTsMarketplace is AccessControlUpgradeable {
         adminFee = _adminFee;
     }
 
+    /**
+     *  @notice Function that allow the owner to withdraw all the funds
+     */
+    function withdraw() public onlyRole(ADMIN_ROLE) {
+        (bool success, ) = msg.sender.call{value: address(this).balance}("");
+        require(success);
+    }
+
     function isAdmin(address _address) external view returns (bool) {
         return(hasRole(ADMIN_ROLE, _address));
     }
